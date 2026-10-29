@@ -1,0 +1,110 @@
+[project]
+name = "fraud-scoring-service"
+version = "1.0.0"
+description = "Real-time payment fraud scoring API (<200ms p99)"
+requires-python = ">=3.9,<3.11"   # scikit-learn 1.0.2 ships wheels for cp38/39/310 only
+
+# Dependencies are declared in requirements.txt with exact pins so that the
+# Docker build and the local dev environment resolve to byte-identical wheels.
+# pyproject here owns tooling configuration only.
+
+# ---------------------------------------------------------------------------
+# Ruff — PEP8 + import sorting + a set of correctness rules
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle (PEP8)
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # flake8-bugbear
+    "C4",        # comprehensions
+    "SIM",       # simplify
+    "ANN",       # flake8-annotations (static typing enforcement)
+    "S",         # bandit security rules
+    "RUF",
+]
+ignore = [
+    "ANN101",  # missing type annotation for `self`
+    "ANN102",  # missing type annotation for `cls`
+    # UP007 rewrites `Optional[X]` to `X | None`. Ruff considers that safe here
+    # because of `from __future__ import annotations` — and for ordinary code it
+    # is. But Pydantic and FastAPI *evaluate* annotations at runtime, and
+    # Python 3.9 cannot eval `str | None` from a string annotation:
+    #   TypeError: You have a type annotation 'str | None' which makes use of
+    #   newer typing features than are supported in your version of Python.
+    # Applying this rule takes the service down at import time. Banned until the
+    # interpreter floor moves to 3.10 (which needs the model off pickle first).
+    "UP007",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The request schema field names are the WIRE CONTRACT ("Time", "V1", "Amount").
+# They must match the payload keys exactly, so PEP8 naming does not apply.
+"src/schemas/request.py" = ["N815"]
+# Loading the model pickle is intentional and integrity-checked (see loader.py).
+# ANN401: scikit-learn ships no type stubs, so the estimator is `Any` — it is
+# quarantined here and behind the typed `Predictor` facade, never leaking further.
+"src/ml/loader.py" = ["S301", "ANN401"]
+# structlog processors have a fixed `(logger, method_name, event_dict)` signature.
+"src/core/logging.py" = ["ANN401"]
+"scripts/*" = ["S301", "T201"]
+# assert is the point of a test file; fixtures are duck-typed.
+"tests/**" = ["S101", "ANN201", "ANN001", "ANN401", "SLF001"]
+# Benchmark scripts, not shipped code: terse is fine, they are read as scripts.
+"tests/load/*" = ["S101", "ANN", "E501", "E70", "SIM115", "T201", "S311"]
+
+# ---------------------------------------------------------------------------
+# Black
+# ---------------------------------------------------------------------------
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+
+# ---------------------------------------------------------------------------
+# mypy — strict. Every function in src/ is typed.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.9"
+mypy_path = "src"
+strict = true
+warn_unreachable = true
+disallow_any_generics = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+# scikit-learn ships no type stubs; the estimator is quarantined behind the
+# typed `Predictor` facade so `Any` never leaks past src/ml/.
+module = ["sklearn.*", "joblib.*", "scipy.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "contract: golden-output regression tests that guard against dependency drift",
+    "perf: local latency smoke tests (not a substitute for the k6/locust load test)",
+    "integration: exercises the assembled ASGI app",
+]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

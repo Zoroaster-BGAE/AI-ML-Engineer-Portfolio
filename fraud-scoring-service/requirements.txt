@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# Runtime dependencies — EXACT pins only.
+#
+# The model artifact is a `pickle` of a scikit-learn estimator. A pickle is not
+# a serialization *format*, it is a snapshot of in-memory object state that is
+# coupled to the C-struct layout of the library that produced it.
+#
+# Proven failure mode (reproduced against scikit-learn 1.7.0):
+#   ValueError: node array from the pickle has an incompatible dtype:
+#     - expected: [... 'weighted_n_node_samples', 'missing_go_to_left'] itemsize 64
+#     - got:      [... 'weighted_n_node_samples']
+# sklearn >= 1.3 added the `missing_go_to_left` field to `sklearn.tree._tree.Node`
+# for native missing-value support. The unpickler cannot map the old 56-byte
+# struct onto the new 64-byte one, so the load fails hard at import time.
+#
+# => scikit-learn is pinned to the EXACT version stamped in the artifact
+#    (`estimator._sklearn_version == "1.0.2"`), and numpy/scipy are pinned to
+#    versions whose ABI that build was compiled against.
+#
+# numpy MUST stay <2.0: NumPy 2.x changed the C ABI, and every extension module
+# in the sklearn 1.0.2 wheel was compiled against the 1.x headers.
+#
+# Python is pinned to 3.9 in the Dockerfile: scikit-learn 1.0.2 (Dec 2021)
+# publishes manylinux wheels for cp38/cp39/cp310 only. On 3.11+ pip would
+# attempt a source build against a modern Cython and fail.
+# ---------------------------------------------------------------------------
+
+# --- ML runtime (DO NOT BUMP without regenerating tests/contract/fixtures/golden.json) ---
+scikit-learn==1.0.2
+numpy==1.22.4          # <2.0 is a hard ABI requirement, not a preference
+scipy==1.7.3           # sklearn 1.0.2 transitive dep; pinned for reproducibility
+joblib==1.1.1
+threadpoolctl==3.1.0
+
+# --- Web tier ---
+fastapi==0.110.0
+uvicorn[standard]==0.29.0   # brings uvloop + httptools (Linux); ~2x lower loop overhead
+pydantic==2.6.4             # v2: Rust-core validation, ~10x faster than v1
+pydantic-settings==2.2.1
+orjson==3.9.15              # response serialization off the critical path
+
+# --- Observability ---
+structlog==24.1.0
+prometheus-client==0.20.0

@@ -1,0 +1,49 @@
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --- Virtual environments ----------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# --- Test / tooling caches ---------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+
+# --- Local configuration & secrets -------------------------------------------
+.env
+.env.*
+!.env.example
+.claude/
+*.pem
+*.key
+
+# --- Load-test output --------------------------------------------------------
+locust_report*.html
+*.jtl
+
+# --- OS / editor -------------------------------------------------------------
+.DS_Store
+**/.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
