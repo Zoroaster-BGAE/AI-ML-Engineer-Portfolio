@@ -1,0 +1,13 @@
+# Keep binary assets byte-exact (the sample PDFs are uncompressed ASCII, so git would otherwise treat them as text
+# and rewrite their line endings on Windows, corrupting their byte offsets), and keep scripts LF for Linux containers.
+* text=auto
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.sh text eol=lf
+Dockerfile text eol=lf
+Makefile text eol=lf
+docker-compose.yml text eol=lf

@@ -1,0 +1,16 @@
+# requirements.txt
+
+boto3
+python-dotenv
+pandas
+numpy
+statsmodels
+mpld3
+mplcursors
+smart_open
+seaborn
+matplotlib
+scikit-learn
+scipy
+pathlib
+

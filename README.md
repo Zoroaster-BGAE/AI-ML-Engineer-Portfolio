@@ -25,8 +25,8 @@ and numbers that say how they were measured. My focus, in order: **ML engineerin
 |---|---|---|---|---|
 | [`fraud-scoring-service`](./fraud-scoring-service) | **MLE** | Serving a scikit-learn model as a production service: integrity-checked model loading, readiness gating, latency engineering, observability, deployment design | FastAPI, Docker, Prometheus, scikit-learn | Available (one-off `make demo-model`, see its README) |
 | [`edge-digit-rnn-quantization`](./edge-digit-rnn-quantization) | **DS / applied ML** | Compressing a recurrent classifier under hard hardware limits: knowledge distillation, INT8 and power-of-two quantization-aware training, acceptance tests | PyTorch, librosa | Available |
-| [`field-technician-rag-assistant`](https://github.com/Zoroaster-BGAE/field-technician-rag-assistant) | **AI Eng** | An AI-agent MVP: hybrid retrieval, a code-owned agent state machine, grounded answers with citations, admin trace viewer | FastAPI, Postgres + pgvector, Claude API, React + TypeScript | Available (sanitised release, see its README) |
-| [`turbine-modal-ml-pipeline`](https://github.com/Zoroaster-BGAE/turbine-modal-ml-pipeline) | **MLE / DS** | A container data pipeline for sensor files on S3, and a synthetic vibration generator with known ground truth plus tests that recover the known modes | NumPy / SciPy, pandas, Docker, boto3 | Available (sanitised release, see its README) |
+| [`field-technician-rag-assistant`](./field-technician-rag-assistant) | **AI Eng** | An AI-agent MVP: hybrid retrieval, a code-owned agent state machine, grounded answers with citations, admin trace viewer | FastAPI, Postgres + pgvector, Claude API, React + TypeScript | Available (sanitised release, see its README) |
+| [`turbine-modal-ml-pipeline`](./turbine-modal-ml-pipeline) | **MLE / DS** | A container data pipeline for sensor files on S3, and a synthetic vibration generator with known ground truth plus tests that recover the known modes | NumPy / SciPy, pandas, Docker, boto3 | Available (sanitised release, see its README) |
 
 ## Architecture overview
 
@@ -105,13 +105,13 @@ quantization utilities (hand-written straight-through estimators), per-layer mem
 validation notebook. **Known issue:** the INT8 run scores below the power-of-two run, which is the wrong way round;
 diagnosing it is on the roadmap.
 
-### [`field-technician-rag-assistant`](https://github.com/Zoroaster-BGAE/field-technician-rag-assistant)
+### [`field-technician-rag-assistant`](./field-technician-rag-assistant)
 A sanitised release of an AI-agent MVP that helps a technician troubleshoot industrial equipment from that machine's
 own manuals. The technician picks a client and machine, and the agent retrieves only from that scope, then answers
 with citations or asks one clarifying question. Names are replaced with placeholders and the manuals are a fictional,
 generated corpus. It is not a clean-room rebuild, and the repository README says what was and was not changed.
 
-### [`turbine-modal-ml-pipeline`](https://github.com/Zoroaster-BGAE/turbine-modal-ml-pipeline)
+### [`turbine-modal-ml-pipeline`](./turbine-modal-ml-pipeline)
 A sanitised release of a container data pipeline written for an employer (it selects healthy sensor files per day
 and speed bin and concatenates them), plus a **synthetic vibration generator written from scratch** and MIT-licensed:
 damped modes with known frequency, damping and mode shapes, rotor harmonics, drift, and noise at a set SNR, with
@@ -132,15 +132,13 @@ deployment code are not included.
 AI-ML-Engineer-Portfolio/
 ├── fraud-scoring-service/            MLE: model serving and observability
 ├── edge-digit-rnn-quantization/      DS: distillation and quantization-aware training
+├── field-technician-rag-assistant/   AI Eng: hybrid retrieval and agent state machine (sanitised release)
+├── turbine-modal-ml-pipeline/        MLE/DS: container data pipeline and synthetic vibration generator (sanitised release)
 ├── BayesianChessBot/                 earlier work
 ├── DF.Docs/                          earlier work
 ├── DVisualisation_Journalist_Deaths/ earlier work
 └── README.md
 ```
-
-The other two core projects live in their own repositories:
-[`field-technician-rag-assistant`](https://github.com/Zoroaster-BGAE/field-technician-rag-assistant) and
-[`turbine-modal-ml-pipeline`](https://github.com/Zoroaster-BGAE/turbine-modal-ml-pipeline).
 
 ## Running things
 

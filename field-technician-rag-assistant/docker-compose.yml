@@ -1,0 +1,105 @@
+# Local dev stack: postgres(pgvector) + a Cognito emulator + backend + frontend.
+# Reasoning runs on the Claude API (CLAUDE_API_KEY from ./.env, git-ignored).
+# Embeddings run in-process in the backend (fastembed, downloaded once into the `models` volume).
+#
+# Sign in at http://localhost:5173 as admin@local.test, tech@local.test, lead@local.test or
+# customer@local.test, password Local-dev-1! (emulator-only test accounts, see
+# backend/app/cli/seed_local_cognito.py). No AWS account or credentials are involved.
+services:
+  postgres:
+    # Postgres 17, matching the deployment target. Re-onboard a client into a fresh volume with `make onboard`.
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: assistant
+    ports: ["5432:5432"]
+    volumes: [pgdata17:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d assistant"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # AWS emulator (Cognito now; S3 is there for the features that will need it). State lives in memory, so
+  # `cognito-seed` recreates the pool whenever this starts. The HASH strategies make the pool and client ids a
+  # function of their names, which is why they can be written into the backend's environment below.
+  moto:
+    # Pinned. 5.2+ is required: earlier versions cannot serve the signing keys at the AWS path the backend
+    # fetches them from. The HASH ids below were computed by this version; the seed fails loudly if they change.
+    image: motoserver/moto:5.2.3
+    environment:
+      MOTO_COGNITO_IDP_USER_POOL_ID_STRATEGY: HASH
+      MOTO_COGNITO_IDP_USER_POOL_CLIENT_ID_STRATEGY: HASH
+    ports: ["5055:5000"]      # the browser signs in here directly
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/moto-api/')\""]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  cognito-seed:
+    build: ./backend
+    command: python -m app.cli.seed_local_cognito
+    environment: &local-aws
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/assistant
+      COGNITO_ENDPOINT: http://moto:5000
+      COGNITO_PUBLIC_ENDPOINT: http://localhost:5055
+      COGNITO_REGION: eu-central-1
+      COGNITO_USER_POOL_ID: eu-central-1_87c6d75dbf6555678b6071848a0766c7c990b3d5f0
+      COGNITO_CLIENT_ID: 05848719c8fd1303cfd00f042d
+      # Dummy credentials: boto3 insists on some, moto accepts any. Nothing here can reach real AWS,
+      # because every AWS client in local development is pointed at the emulator.
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_DEFAULT_REGION: eu-central-1
+      # Photos, voice notes and rendered drawings go to a volume locally: moto keeps S3 in memory, so they
+      # would vanish on every restart. The deployment uses an object-storage bucket.
+      MEDIA_STORE: local
+      MEDIA_LOCAL_DIR: /media
+      # moto has no Transcribe; the fake returns a fixed sentence. Real Transcribe needs a real bucket.
+      TRANSCRIBER: fake
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      moto: {condition: service_healthy}
+    restart: "no"
+
+  backend:
+    build: ./backend
+    ports: ["8000:8000"]
+    env_file:
+      - path: ./.env                  # CLAUDE_API_KEY lives here (git-ignored)
+        required: false
+    environment:
+      <<: *local-aws
+      FASTEMBED_CACHE_PATH: /models
+      CORS_ORIGINS: http://localhost:5173
+      CORPUS_DIR: /corpus
+    volumes:
+      - ./backend/app:/app/app
+      - ./sample_corpus:/corpus:ro
+      - models:/models
+      - media:/media
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      postgres: {condition: service_healthy}
+      cognito-seed: {condition: service_completed_successfully}
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    ports: ["5173:5173"]
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
+    depends_on: [backend]
+
+volumes:
+  pgdata17:
+  models:
+  media:
+  frontend_node_modules:

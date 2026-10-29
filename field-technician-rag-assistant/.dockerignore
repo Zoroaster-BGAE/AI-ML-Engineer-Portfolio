@@ -1,0 +1,24 @@
+# The build context is the repository root, so anything not listed here is
+# uploaded to the daemon on every build. Harmless today at ~3MB; node_modules
+# alone would make it 200MB the moment anyone runs npm install locally.
+.git
+.github
+
+# Rebuilt inside the image by the node stage.
+frontend/node_modules
+frontend/dist
+
+backend/.venv
+backend/mock
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.ruff_cache
+**/*.egg-info
+
+# Never in an image: the corpus and the API key are supplied at runtime.
+sample_corpus
+private_corpus
+corpus
+.env
+*.env

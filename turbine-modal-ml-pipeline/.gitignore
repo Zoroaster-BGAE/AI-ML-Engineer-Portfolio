@@ -1,0 +1,123 @@
+# =============================================================================
+# Strict ignore rules for a repo that must never contain real sensor data,
+# credentials or cloud identifiers. When in doubt a file is ignored, not committed.
+# =============================================================================
+
+# --- Secrets and credentials -------------------------------------------------
+.env
+.env.*
+!.env.example
+*.env
+.env.secrets
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*config*.ini
+!*config*.ini.example
+id_rsa*
+id_ed25519*
+.aws/
+.ssh/
+.npmrc
+.pypirc
+.netrc
+credentials
+credentials.*
+*credentials*.json
+*credentials*.csv
+*credentials*.txt
+*accessKeys*
+*accesskeys*
+*access_keys*
+*secret*.json
+*secret*.txt
+*secret*.csv
+*secret*.yaml
+*secret*.yml
+*_KEY.txt
+*_KEY.json
+*api_key*.txt
+.claude/
+CLAUDE.local.md
+
+# --- Data: ALL tabular, serialised, signal or archive files ---------------------
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.mat
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.joblib
+*.db
+*.sqlite
+*.sqlite3
+*.gz
+*.tar
+*.zip
+*.rar
+*.7z
+*.bin
+*.wav
+data/
+raw/
+processed/
+outputs/
+results/
+cluster_results/
+conc_results/
+
+# --- Documents and images: could be internal reports or plots of real data ------
+*.pdf
+*.docx
+*.xlsx
+*.pptx
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+!docs/**/*.png
+!docs/**/*.svg
+
+# --- Notebook droppings ---------------------------------------------------------
+.ipynb_checkpoints/
+
+# --- Infrastructure state --------------------------------------------------------
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# --- Python / tooling -----------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.log
+
+# --- Editor / OS ------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# --- Third-party code is fetched, never vendored (see THIRD_PARTY.md) ---------------
+third_party/

@@ -1,0 +1,50 @@
+[project]
+name = "assistant-backend"
+version = "0.1.0"
+description = "Field Technician AI Assistant - FastAPI backend (scope-enforced agentic retrieval)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sse-starlette>=2.1",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "anthropic>=1.0",
+    "httpx>=0.27",            # Ollama embeddings client (optional embedder)
+    "fastembed>=0.5",         # in-process multilingual embeddings (ONNX, CPU)
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.3",
+    "alembic>=1.13",
+    "pdfplumber>=0.11",
+    "Pillow>=10.0",          # photo re-encoding (app.media) -- also a pdfplumber dependency, now used directly
+    "pypdfium2>=4.0",        # renders drawing pages to images at ingest (app.ingest.figures)
+    "pyyaml>=6.0",
+    "pyjwt[crypto]>=2.8",   # [crypto] is required: Cognito signs with RS256
+    "python-multipart>=0.0.9",
+    "structlog>=24.1",
+    "prometheus-client>=0.20",
+    "boto3>=1.34",           # scheduled ingest mirrors the manuals bucket to disk
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6", "reportlab>=4.0"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["db: needs the Postgres+pgvector test database (docker compose up -d postgres)"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008", "E501"]

@@ -1,0 +1,4 @@
+# Keep scripts and container files LF so they run in Linux containers even when cloned on Windows.
+* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf

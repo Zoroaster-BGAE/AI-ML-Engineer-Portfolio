@@ -1,0 +1,109 @@
+# =============================================================================
+# Strict ignore rules. Anything that could carry a credential, customer data or a
+# build artefact stays out of git. When in doubt a file is ignored, not committed.
+# =============================================================================
+
+# --- Secrets and credentials -------------------------------------------------
+.env
+.env.*
+!.env.example
+*.env
+.env.secrets
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+.aws/
+.ssh/
+.npmrc
+.pypirc
+.netrc
+credentials
+credentials.*
+*credentials*.json
+*credentials*.csv
+*credentials*.txt
+*accessKeys*
+*accesskeys*
+*access_keys*
+*secret*.json
+*secret*.txt
+*secret*.csv
+*secret*.yaml
+*secret*.yml
+*secret*.ini
+*_KEY.txt
+*_KEY.json
+*api_key*.txt
+.claude/
+CLAUDE.local.md
+
+# --- Data: anything tabular, serialised or archived is presumed real data -----
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.joblib
+*.db
+*.sqlite
+*.sqlite3
+*.gz
+*.tar
+*.zip
+*.rar
+*.7z
+
+# --- Documents: PDFs are presumed to be someone's manuals. Only the synthetic
+# --- sample corpus is allowed.
+*.pdf
+!sample_corpus/
+!sample_corpus/**/
+!sample_corpus/**/*.pdf
+private_corpus/
+/corpus/
+/manuals/
+/client_data/
+/data/
+
+# --- Infrastructure state ----------------------------------------------------
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# --- Python / Node / tooling ---------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+node_modules/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.log
+.run/
+
+# --- Editor / OS ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
