@@ -5,7 +5,7 @@
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?logo=scikitlearn&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
-![AWS](https://img.shields.io/badge/AWS-SageMaker%20%7C%20ECS%20%7C%20Lambda-FF9900)
+![AWS](https://img.shields.io/badge/AWS-Cognito%20%7C%20deployment%20design-FF9900)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
 ![React](https://img.shields.io/badge/React-TypeScript-61DAFB?logo=react&logoColor=black)
 ![Claude API](https://img.shields.io/badge/Claude%20API-D97757?logo=anthropic&logoColor=white)
@@ -14,9 +14,10 @@ Machine-learning and AI engineering work, built to be read: each project has a d
 and numbers that say how they were measured. My focus, in order: **ML engineering**, **AI engineering**,
 **data science**.
 
-> **Data policy.** Everything here runs on public or synthetic data. No client, employer or other third-party
-> proprietary material (code, data, documents, credentials) is included. Where a project reports numbers, its README says how
-> they were produced.
+> **Data policy.** No real data, documents, credentials or configuration is included: everything runs on public or
+> synthetic data. Two projects, `field-technician-rag-assistant` and `turbine-modal-ml-pipeline`, are **sanitised
+> releases of work done for a client and an employer**, published with their permission and with identifying details removed;
+> their READMEs say exactly what that means. Where a project reports numbers, its README says how they were produced.
 
 ## The four core projects
 
@@ -24,8 +25,8 @@ and numbers that say how they were measured. My focus, in order: **ML engineerin
 |---|---|---|---|---|
 | [`fraud-scoring-service`](./fraud-scoring-service) | **MLE** | Serving a scikit-learn model as a production service: integrity-checked model loading, readiness gating, latency engineering, observability, deployment design | FastAPI, Docker, Prometheus, scikit-learn | Available (one-off `make demo-model`, see its README) |
 | [`edge-digit-rnn-quantization`](./edge-digit-rnn-quantization) | **DS / applied ML** | Compressing a recurrent classifier under hard hardware limits: knowledge distillation, INT8 and power-of-two quantization-aware training, acceptance tests | PyTorch, librosa | Available |
-| `field-technician-rag-assistant` | **AI Eng** | An AI-agent MVP: hybrid retrieval, a code-owned agent state machine, grounded answers with citations, admin trace viewer | FastAPI, Postgres + pgvector, Claude API, React + TypeScript | Pending release (private for now) |
-| `turbine-modal-ml-pipeline` | **MLE / DS** | A clean-room reference implementation of a production predictive-maintenance pipeline for vibration data | NumPy / SciPy, PyTorch, Terraform, AWS (S3, Lambda, SageMaker) | In progress |
+| [`field-technician-rag-assistant`](https://github.com/Zoroaster-BGAE/field-technician-rag-assistant) | **AI Eng** | An AI-agent MVP: hybrid retrieval, a code-owned agent state machine, grounded answers with citations, admin trace viewer | FastAPI, Postgres + pgvector, Claude API, React + TypeScript | Available (sanitised release, see its README) |
+| [`turbine-modal-ml-pipeline`](https://github.com/Zoroaster-BGAE/turbine-modal-ml-pipeline) | **MLE / DS** | A container data pipeline for sensor files on S3, and a synthetic vibration generator with known ground truth plus tests that recover the known modes | NumPy / SciPy, pandas, Docker, boto3 | Available (sanitised release, see its README) |
 
 ## Architecture overview
 
@@ -40,22 +41,21 @@ flowchart LR
         S4["Transactions<br/>synthetic, 30 features"]
     end
     subgraph Model["Model development"]
-        M1["Modal analysis + VQ-VAE tokenizer<br/>turbine-modal-ml-pipeline"]
+        M1["Ground-truth signal generator + test harness<br/>turbine-modal-ml-pipeline"]
         M2["Distillation + INT8 / power-of-two QAT<br/>edge-digit-rnn-quantization"]
     end
     subgraph Serve["Serving and MLOps"]
         V1["FastAPI scoring service<br/>fraud-scoring-service"]
-        V2["Event-driven AWS pattern<br/>S3, Lambda, SageMaker"]
+        V2["Container data pipeline<br/>turbine-modal-ml-pipeline"]
     end
     subgraph LLM["LLM applications"]
         L1["Hybrid retrieval + agent state machine<br/>field-technician-rag-assistant"]
     end
-    S1 --> M1 --> V2
+    S1 --> M1
     S2 --> M2
     S4 --> V1
     S3 --> L1
     V1 --> O["Observability<br/>RED metrics, score drift signals, golden tests"]
-    V2 --> O
     L1 --> O
 ```
 
@@ -69,8 +69,8 @@ flowchart LR
   scikit-learn output exactly, and a switch turns it off.
 - **Operability.** Prometheus RED metrics plus score-distribution and decision-rate signals (inputs for drift
   monitoring), a golden-score contract test, and load-test tooling.
-- **Pipelines.** `turbine-modal-ml-pipeline` (in progress): signal processing, a discrete-token foundation model,
-  and an event-driven AWS deployment pattern.
+- **Pipelines and test data.** `turbine-modal-ml-pipeline`: a containerised pipeline that selects and concatenates
+  sensor files from S3, and a synthetic ground-truth generator for testing estimators without real data.
 
 ### AI engineering
 - **Hybrid retrieval.** Vector similarity (pgvector, HNSW) and Postgres full-text search, fused with Reciprocal
@@ -85,8 +85,9 @@ flowchart LR
 ### Data science
 - **Model compression** (`edge-digit-rnn-quantization`): distillation from a GRU teacher into a minimal-gated-unit
   student under a per-layer memory limit, then quantization-aware training.
-- **Time series and signal processing** (`turbine-modal-ml-pipeline`, in progress): Butterworth filtering, SSI-COV
-  system identification and density-based clustering, validated against synthetic ground truth.
+- **Time series and signal processing** (`turbine-modal-ml-pipeline`): a structural-vibration generator with known
+  ground truth (modal responses, rotor harmonics, drift, noise at a set SNR) and tests that recover the known
+  frequencies and mode shapes from spectral estimates. The estimators themselves are not in the repository.
 - **Earlier analytics work** is kept below.
 
 ## Project notes
@@ -104,17 +105,18 @@ quantization utilities (hand-written straight-through estimators), per-layer mem
 validation notebook. **Known issue:** the INT8 run scores below the power-of-two run, which is the wrong way round;
 diagnosing it is on the roadmap.
 
-### `field-technician-rag-assistant` (pending release)
-An AI-agent MVP that helps a technician troubleshoot industrial equipment from that machine's own manuals. The
-technician picks a client and machine, and the agent retrieves only from that scope, then answers with citations or
-asks one clarifying question. Released here once the code has been cleared for publication and the demo corpus is
-fully synthetic.
+### [`field-technician-rag-assistant`](https://github.com/Zoroaster-BGAE/field-technician-rag-assistant)
+A sanitised release of an AI-agent MVP that helps a technician troubleshoot industrial equipment from that machine's
+own manuals. The technician picks a client and machine, and the agent retrieves only from that scope, then answers
+with citations or asks one clarifying question. Names are replaced with placeholders and the manuals are a fictional,
+generated corpus. It is not a clean-room rebuild, and the repository README says what was and was not changed.
 
-### `turbine-modal-ml-pipeline` (in progress)
-A **clean-room** implementation: written from public literature, on synthetic data with known ground truth, with no
-code, data or configuration from any employer or client. Planned scope: operational modal analysis, a VQ-VAE
-time-series tokenizer with fixes for codebook collapse, a sampling strategy that trades compute for estimation
-error, and a deployment pattern on AWS.
+### [`turbine-modal-ml-pipeline`](https://github.com/Zoroaster-BGAE/turbine-modal-ml-pipeline)
+A sanitised release of a container data pipeline written for an employer (it selects healthy sensor files per day
+and speed bin and concatenates them), plus a **synthetic vibration generator written from scratch** and MIT-licensed:
+damped modes with known frequency, damping and mode shapes, rotor harmonics, drift, and noise at a set SNR, with
+tests that recover the known modes and mode shapes from the signal. The mode-clustering pipeline and the cloud
+deployment code are not included.
 
 ## Earlier work
 
@@ -136,7 +138,9 @@ AI-ML-Engineer-Portfolio/
 └── README.md
 ```
 
-`field-technician-rag-assistant` and `turbine-modal-ml-pipeline` are added when released.
+The other two core projects live in their own repositories:
+[`field-technician-rag-assistant`](https://github.com/Zoroaster-BGAE/field-technician-rag-assistant) and
+[`turbine-modal-ml-pipeline`](https://github.com/Zoroaster-BGAE/turbine-modal-ml-pipeline).
 
 ## Running things
 
@@ -144,10 +148,11 @@ AI-ML-Engineer-Portfolio/
 |---|---|---|
 | `fraud-scoring-service` | Docker, `make` | `make demo-model && make golden && make test && make build && make run` |
 | `edge-digit-rnn-quantization` | Python 3.10+ | `pip install -r requirements.txt`, then follow the project README (dataset clone, then `python main.py`) |
+| `turbine-modal-ml-pipeline` | Python 3.10+ | `pip install -r requirements.txt && pytest` (tests the synthetic generator) |
+| `field-technician-rag-assistant` | Docker, a Claude API key | see the project README |
 
 ## What's next
 
-- Publish `turbine-modal-ml-pipeline` and `field-technician-rag-assistant`.
 - CI on every project (lint, type-check, tests, container build).
 - An evaluation harness for the retrieval agent: retrieval ablations, threshold calibration, false-answer rate.
 - A SageMaker deployment adapter for the scoring service.
