@@ -1,0 +1,8 @@
+# Derived from the imports in this repo and the README install line. Not version-pinned and not
+# re-tested after staging: pin the versions you actually trained with before relying on it.
+torch>=2.0
+librosa>=0.10
+numpy
+scikit-learn
+matplotlib
+jupyter
