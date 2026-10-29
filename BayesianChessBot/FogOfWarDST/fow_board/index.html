@@ -1,0 +1,288 @@
+<!doctype html>
+<!--
+  Fog-of-War board: a dependency-free Streamlit custom component.
+  Drag pieces (or click piece, then click target), legal-move dots,
+  promotion picker, and DST hover tooltips on fogged squares.
+  Talks to Streamlit with the raw component postMessage protocol.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --s: 64px; }
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden;
+               font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #wrap { display: inline-block; padding: 10px; background: #2b2118; border-radius: 10px; }
+  #board { display: grid; grid-template-columns: 18px repeat(8, var(--s));
+           grid-template-rows: repeat(8, var(--s)) 18px; touch-action: none; }
+  .coord { color: #c9b79c; font: 600 11px/1 system-ui, sans-serif;
+           display: flex; align-items: center; justify-content: center; }
+  .sq { position: relative; display: flex; align-items: center; justify-content: center;
+        user-select: none; -webkit-user-select: none; }
+  .sq.light { background: #ecd9b9; } .sq.dark { background: #b58863; }
+  .sq.fog { background: repeating-linear-gradient(135deg, #3b4048 0 6px, #353a42 6px 12px); }
+  .sq.fog.light { filter: brightness(1.12); }
+  .sq.fog.est { cursor: help; }
+  .sq.fog.est:hover { outline: 3px solid #f2c94c; outline-offset: -3px; z-index: 3; }
+  .sq.mine { cursor: grab; }
+  .sq.sel { box-shadow: inset 0 0 0 4px #f2c94c; }
+  .sq.last { box-shadow: inset 0 0 0 999px #f6e58d55; }
+  .sq.dot::after { content: ""; position: absolute; width: 26%; height: 26%;
+                   border-radius: 50%; background: #0000004d; pointer-events: none; }
+  .sq.cap::after { content: ""; position: absolute; inset: 3px; border-radius: 50%;
+                   border: calc(var(--s) * .08) solid #0000004d; pointer-events: none; }
+  .sq.hover-target { box-shadow: inset 0 0 0 4px #ffffffaa; }
+  .pc { font-size: calc(var(--s) * .72); line-height: 1; pointer-events: none; }
+  .pc-w { color: #fafafa; text-shadow: 0 0 2px #000, 0 0 1px #000, 1px 1px 0 #000; }
+  .pc-b { color: #151515; text-shadow: 0 0 1px #fff8; }
+  .ghosted { opacity: .3; }
+  .drag-clone { position: fixed; pointer-events: none; z-index: 100; transform: translate(-50%, -55%);
+                font-size: calc(var(--s) * .85); line-height: 1; }
+  .guess { position: absolute; bottom: 3px; right: 4px; font: 600 11px/1 system-ui, sans-serif;
+           color: #d7dde6; opacity: .85; pointer-events: none; }
+  .heat { position: absolute; inset: 0; background: #e2563b; pointer-events: none; }
+  #legend { font-size: 12px; color: #8a8f98; margin: 6px 2px 0; }
+  #tip { display: none; position: fixed; z-index: 50; width: 300px; padding: 10px 12px; border-radius: 8px;
+         background: #1d2128; color: #e8ecf2; font-size: 12px; line-height: 1.35;
+         box-shadow: 0 8px 24px #0009; pointer-events: none; }
+  #tip h4 { margin: 0 0 6px; font-size: 13px; color: #f2c94c; }
+  #tip table { width: 100%; border-collapse: collapse; }
+  #tip td { padding: 2px 3px; white-space: nowrap; }
+  #tip td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  #tip .hd td { color: #8b95a5; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  .bar { position: relative; height: 9px; width: 80px; background: #2f3540; border-radius: 2px; }
+  .bar .bel { position: absolute; left: 0; top: 0; bottom: 0; background: #4f9cf0; border-radius: 2px; }
+  .bar .unc { position: absolute; top: 0; bottom: 0; background: #4f9cf055; }
+  .bar .bp { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #f2c94c; }
+  #tip .foot { margin-top: 6px; color: #aab3c0; font-size: 11px; }
+  #promo { display: none; position: fixed; inset: 0; background: #0008; z-index: 200;
+           align-items: center; justify-content: center; }
+  #promo .box { background: #1d2128; padding: 12px; border-radius: 10px; display: flex; gap: 8px; }
+  #promo button { width: 64px; height: 64px; font-size: 44px; line-height: 1; border: 0; border-radius: 8px;
+                  background: #ecd9b9; cursor: pointer; }
+  #promo button:hover { background: #f2c94c; }
+</style>
+</head>
+<body>
+<div id="wrap"><div id="board"></div></div>
+<div id="legend"></div>
+<div id="tip"></div>
+<div id="promo"><div class="box"></div></div>
+<script>
+"use strict";
+const GLYPH = { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
+const VS15 = "︎";
+const NAMES = { K: "King", Q: "Queen", R: "Rook", B: "Bishop", N: "Knight", P: "Pawn", Em: "Empty" };
+const FILES = "abcdefgh";
+const boardEl = document.getElementById("board");
+const tipEl = document.getElementById("tip");
+const promoEl = document.getElementById("promo");
+
+let args = null;      // latest props from Python
+let sel = null;       // selected from-square
+let drag = null;      // active drag state
+let sent = false;     // a move was submitted; wait for the next render
+let cells = {};       // square index -> element
+
+// ---------- Streamlit protocol ----------
+function post(type, data) {
+  window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data || {}), "*");
+}
+function setHeight() { post("streamlit:setFrameHeight", { height: document.body.scrollHeight + 4 }); }
+window.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "streamlit:render") {
+    args = e.data.args;
+    sent = false; sel = null;
+    render();
+  }
+});
+
+// ---------- helpers ----------
+const sqName = (sq) => FILES[sq % 8] + (Math.floor(sq / 8) + 1);
+const targetsOf = (from) => (args && args.moves[from]) || [];
+const findTarget = (from, to) => targetsOf(from).find((t) => t[0] === to);
+
+function glyphHTML(sym) {
+  const cls = sym === sym.toUpperCase() ? "pc-w" : "pc-b";
+  return `<span class="pc ${cls}">${GLYPH[sym.toLowerCase()]}${VS15}</span>`;
+}
+
+function fitSize() {
+  const avail = window.innerWidth - 20 - 18 - 4;
+  const s = Math.max(36, Math.min(72, Math.floor(avail / 8)));
+  document.documentElement.style.setProperty("--s", s + "px");
+}
+
+// ---------- rendering ----------
+function render() {
+  if (!args) return;
+  fitSize();
+  hideTip();
+  boardEl.innerHTML = "";
+  cells = {};
+  const white = args.pov === "w";
+  const ranks = white ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+  const files = white ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
+  for (const r of ranks) {
+    boardEl.insertAdjacentHTML("beforeend", `<div class="coord">${r + 1}</div>`);
+    for (const f of files) {
+      const sq = r * 8 + f;
+      const c = args.cells[sq];
+      const el = document.createElement("div");
+      el.className = "sq " + ((r + f) % 2 ? "light" : "dark");
+      el.dataset.sq = sq;
+      if (c.fog) {
+        el.classList.add("fog");
+        if (c.est) {
+          el.classList.add("est");
+          if (args.heat) el.insertAdjacentHTML("beforeend",
+            `<span class="heat" style="opacity:${Math.min(0.65, c.est.occ * 0.9).toFixed(2)}"></span>`);
+          if (args.showGuess && c.est.guess[0] !== "Em") el.insertAdjacentHTML("beforeend",
+            `<span class="guess">${c.est.guess[0]} ${Math.round(c.est.guess[1] * 100)}%</span>`);
+        }
+      } else if (c.p) {
+        el.insertAdjacentHTML("beforeend", glyphHTML(c.p));
+      }
+      if (args.interactive && args.moves[sq]) el.classList.add("mine");
+      if (args.last && args.last.includes(sq)) el.classList.add("last");
+      cells[sq] = el;
+      boardEl.appendChild(el);
+    }
+  }
+  boardEl.insertAdjacentHTML("beforeend", `<div class="coord"></div>`);
+  for (const f of files) boardEl.insertAdjacentHTML("beforeend", `<div class="coord">${FILES[f]}</div>`);
+  document.getElementById("legend").textContent = args.legend || "";
+  setHeight();
+}
+
+function clearMarks() {
+  for (const el of Object.values(cells)) el.classList.remove("sel", "dot", "cap", "hover-target");
+}
+function select(sq) {
+  clearMarks();
+  sel = sq;
+  cells[sq].classList.add("sel");
+  for (const [to] of targetsOf(sq)) {
+    const c = args.cells[to];
+    cells[to].classList.add(!c.fog && c.p ? "cap" : "dot");
+  }
+}
+function unselect() { sel = null; clearMarks(); }
+
+// ---------- moves ----------
+function submit(from, to) {
+  const t = findTarget(from, to);
+  if (!t || sent) return;
+  if (t[1]) { askPromotion(from, to); return; }
+  send(sqName(from) + sqName(to));
+}
+function send(uci) {
+  sent = true;
+  unselect();
+  post("streamlit:setComponentValue", { value: { uci: uci, ply: args.ply }, dataType: "json" });
+}
+function askPromotion(from, to) {
+  const white = args.pov === "w";
+  const box = promoEl.querySelector(".box");
+  box.innerHTML = "";
+  for (const p of ["q", "r", "b", "n"]) {
+    const b = document.createElement("button");
+    b.innerHTML = glyphHTML(white ? p.toUpperCase() : p);
+    b.title = { q: "Queen", r: "Rook", b: "Bishop", n: "Knight" }[p];
+    b.onclick = () => { promoEl.style.display = "none"; send(sqName(from) + sqName(to) + p); };
+    box.appendChild(b);
+  }
+  promoEl.style.display = "flex";
+  promoEl.onclick = (e) => { if (e.target === promoEl) { promoEl.style.display = "none"; unselect(); } };
+}
+
+// ---------- pointer handling: drag-and-drop + click-to-move ----------
+function cellAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest(".sq") : null;
+}
+boardEl.addEventListener("pointerdown", (e) => {
+  if (!args || !args.interactive || sent || e.button !== 0) return;
+  const cell = e.target.closest(".sq");
+  if (!cell) return;
+  const sq = +cell.dataset.sq;
+  if (sel !== null && findTarget(sel, sq)) { submit(sel, sq); return; }
+  if (!args.moves[sq]) { unselect(); return; }
+  const wasSelected = sel === sq;
+  select(sq);
+  const pc = cell.querySelector(".pc");
+  if (!pc) return;
+  hideTip();
+  const clone = pc.cloneNode(true);
+  clone.className = pc.className.replace("pc ", "") + " drag-clone";
+  clone.style.left = e.clientX + "px";
+  clone.style.top = e.clientY + "px";
+  document.body.appendChild(clone);
+  pc.classList.add("ghosted");
+  drag = { from: sq, clone: clone, pc: pc, x0: e.clientX, y0: e.clientY, moved: false, wasSelected: wasSelected, over: null };
+  boardEl.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+boardEl.addEventListener("pointermove", (e) => {
+  if (drag) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 4) drag.moved = true;
+    drag.clone.style.left = e.clientX + "px";
+    drag.clone.style.top = e.clientY + "px";
+    const cell = cellAt(e.clientX, e.clientY);
+    const to = cell ? +cell.dataset.sq : null;
+    if (drag.over !== null && cells[drag.over]) cells[drag.over].classList.remove("hover-target");
+    drag.over = to !== null && findTarget(drag.from, to) ? to : null;
+    if (drag.over !== null) cells[drag.over].classList.add("hover-target");
+    return;
+  }
+  const cell = e.target.closest(".sq");
+  const c = cell && args ? args.cells[+cell.dataset.sq] : null;
+  if (c && c.fog && c.est) showTip(+cell.dataset.sq, cell); else hideTip();
+});
+boardEl.addEventListener("pointerleave", () => { if (!drag) hideTip(); });
+function endDrag(e) {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  d.clone.remove();
+  d.pc.classList.remove("ghosted");
+  const cell = cellAt(e.clientX, e.clientY);
+  const to = cell ? +cell.dataset.sq : null;
+  if (to !== null && to !== d.from && findTarget(d.from, to)) { submit(d.from, to); return; }
+  if (d.moved || d.wasSelected) unselect();   // dropped elsewhere, or clicked twice: deselect
+  else select(d.from);                         // simple click: keep selection for click-to-move
+}
+boardEl.addEventListener("pointerup", endDrag);
+boardEl.addEventListener("pointercancel", endDrag);
+
+// ---------- tooltip ----------
+function showTip(sq, cell) {
+  const est = args.cells[sq].est;
+  let rows = '<tr class="hd"><td></td><td class="n">m=Bel</td><td class="n">Pl</td><td class="n">BetP</td><td>[Bel, Pl]</td></tr>';
+  for (const [h, bel, pl, bp] of est.rows) {
+    rows += `<tr><td><b>${h}</b> ${NAMES[h]}</td><td class="n">${bel.toFixed(3)}</td>` +
+      `<td class="n">${pl.toFixed(3)}</td><td class="n">${bp.toFixed(3)}</td><td><div class="bar">` +
+      `<span class="bel" style="width:${(bel * 100).toFixed(1)}%"></span>` +
+      `<span class="unc" style="left:${(bel * 100).toFixed(1)}%;width:${(Math.max(0, pl - bel) * 100).toFixed(1)}%"></span>` +
+      `<span class="bp" style="left:calc(${(bp * 100).toFixed(1)}% - 1px)"></span></div></td></tr>`;
+  }
+  let foot = `Non-singleton mass: ${est.comp}<br>Conflict K = ${est.K.toFixed(3)} · ${est.n} evidence source(s)`;
+  if (est.skipped) foot += ` · ${est.skipped} skipped (total conflict)`;
+  tipEl.innerHTML = `<h4>${sqName(sq)} — under the fog</h4><table>${rows}</table><div class="foot">${foot}</div>`;
+  tipEl.style.display = "block";
+  const r = cell.getBoundingClientRect();
+  const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  let x = r.right + 8;
+  if (x + w > window.innerWidth) x = r.left - w - 8;
+  if (x < 0) x = Math.max(0, window.innerWidth - w);
+  let y = Math.min(r.top, window.innerHeight - h - 2);
+  tipEl.style.left = x + "px";
+  tipEl.style.top = Math.max(0, y) + "px";
+}
+function hideTip() { tipEl.style.display = "none"; }
+
+window.addEventListener("resize", () => { if (args) render(); });
+post("streamlit:componentReady", { apiVersion: 1 });
+</script>
+</body>
+</html>
